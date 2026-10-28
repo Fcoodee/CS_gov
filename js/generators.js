@@ -600,6 +600,13 @@
 
   /* ---------- الواجهة العامة ---------- */
   var ORDER = ["hex2bin", "bin2oct", "dec2hex", "binarith", "binmul", "twos", "oct2dec", "demorgan", "simplify", "truthcount", "kmap3", "det2", "matmul2", "inv2", "singular", "matsize"];
+  ORDER.forEach(function (id) { T[id].std = 1; });
+
+  /* تسجيل قوالب معيار آخر (js/generators-mNN.js) */
+  function register(id, def) {
+    if (T[id]) throw new Error("duplicate template " + id);
+    T[id] = def; ORDER.push(id);
+  }
 
   function make(tplId, seed) {
     var t = T[tplId]; if (!t) throw new Error("unknown template " + tplId);
@@ -608,16 +615,19 @@
       var r = RNG((s + k * 7919) >>> 0);
       try {
         var q = t.gen(r);
-        q.id = "g:" + tplId + ":" + s; q.seed = s;
+        q.id = "g:" + tplId + ":" + s; q.seed = s; q.std = t.std;
         return q;
       } catch (e) { if (!(e instanceof Collision)) throw e; }
     }
     throw new Error("could not generate " + tplId + " for seed " + seed);
   }
 
-  function list() {
-    return ORDER.map(function (id) { return { id: id, ind: T[id].ind, name: T[id].name }; });
+  function list(std) {
+    return ORDER.filter(function (id) { return !std || T[id].std === std; })
+      .map(function (id) { return { id: id, std: T[id].std, ind: T[id].ind, name: T[id].name }; });
   }
 
-  return { make: make, list: list, templates: ORDER, _minimize3: minimize3, _expr3: expr3 };
+  return { make: make, list: list, register: register,
+    helpers: { build: build, need: need, B: B, M: M, bin: bin, stripZ: stripZ, Collision: Collision },
+    _minimize3: minimize3, _expr3: expr3 };
 });

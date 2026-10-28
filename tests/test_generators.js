@@ -2,6 +2,7 @@
 "use strict";
 const assert = require("assert");
 const G = require("../js/generators.js");
+require("../js/generators-m02.js");
 const SEEDS = +process.env.SEEDS || 400;
 
 const strip = (t) => t.replace(/`/g, "");
@@ -78,8 +79,23 @@ const checks = {
     assert.ok(q.opts.filter((o) => o.t === "غير معرّف").length === 1); }
 };
 
+const bitsOf = (n, w) => n.toString(2).padStart(w, "0");
+const FFM = { D: (q, v) => v[0], T: (q, v) => q ^ v[0], JK: (q, v) => (v[0] && v[1] ? 1 - q : v[0] ? 1 : v[1] ? 0 : q), SR: (q, v) => (v[0] ? 1 : v[1] ? 0 : q) };
+Object.assign(checks, {
+  fulladder(q) { const { a, b, c } = q.params; const t = a + b + c; const want = "Sum=" + (t % 2) + ", Cout=" + (t >> 1); assert.strictEqual(strip(q.opts[0].t), want); q.opts.slice(1).forEach((o) => assert.notStrictEqual(strip(o.t), want)); },
+  decoder(q) { const { n, k } = q.params; const code = /= ([01]+)/.exec(q.stem)[1]; assert.strictEqual(code.length, n); assert.strictEqual(parseInt(code, 2), k); assert.strictEqual(strip(q.opts[0].t), "O" + k); q.opts.slice(1).forEach((o) => assert.notStrictEqual(strip(o.t), "O" + k)); },
+  encoder(q) { const { n, k } = q.params; assert.ok(q.stem.includes("D" + k)); assert.strictEqual(strip(q.opts[0].t), bitsOf(k, n)); q.opts.slice(1).forEach((o) => assert.notStrictEqual(strip(o.t), bitsOf(k, n))); },
+  mux(q) { const { n, k } = q.params; const code = /= ([01]+)/.exec(q.stem)[1]; assert.strictEqual(parseInt(code, 2), k); assert.strictEqual(strip(q.opts[0].t), "A" + k); q.opts.slice(1).forEach((o) => assert.notStrictEqual(strip(o.t), "A" + k)); },
+  ripple(q) { const { a, b } = q.params; assert.strictEqual(parseInt(strip(q.opts[0].t), 2), a + b); q.opts.slice(1).forEach((o) => assert.notStrictEqual(parseInt(strip(o.t), 2), a + b)); },
+  ffseq(q) { const { type, q0, inputs } = q.params; let s = q0; const out = inputs.map((v) => (s = FFM[type](s, v))); assert.strictEqual(strip(q.opts[0].t), out.join(","));
+    q.opts.slice(1).forEach((o) => assert.notStrictEqual(strip(o.t), out.join(","))); if (type === "SR") inputs.forEach((v) => assert.ok(!(v[0] && v[1]), "SR forbidden state generated")); },
+  counter(q) { const { n, s, p } = q.params; assert.strictEqual(strip(q.opts[0].t), bitsOf((s + p) % (1 << n), n)); q.opts.slice(1).forEach((o) => assert.notStrictEqual(strip(o.t), bitsOf((s + p) % (1 << n), n))); },
+  ffcount(q) { const M = q.params.max; let n = 1; while ((1 << n) - 1 < M) n++; assert.strictEqual(+strip(q.opts[0].t), n); q.opts.slice(1).forEach((o) => assert.notStrictEqual(+strip(o.t), n)); },
+  transfer(q) { const k = q.params.k; assert.strictEqual(strip(q.opts[0].t), k + " نبضة / 1 نبضة"); q.opts.slice(1).forEach((o) => assert.notStrictEqual(strip(o.t), k + " نبضة / 1 نبضة")); }
+});
+
 let n = 0; const seen = {};
-for (const tpl of G.templates) {
+for (const tpl of G.list().map((x) => x.id)) {
   assert.ok(checks[tpl], "missing check for " + tpl);
   const sigs = new Set();
   for (let seed = 1; seed <= SEEDS; seed++) {
@@ -90,6 +106,6 @@ for (const tpl of G.templates) {
     if (seed % 50 === 0) assert.deepStrictEqual(JSON.parse(JSON.stringify(G.make(tpl, seed))), JSON.parse(JSON.stringify(q)));
   }
   seen[tpl] = sigs.size;
-  assert.ok(sigs.size >= 12, tpl + " has too little variety: " + sigs.size);
+  assert.ok(sigs.size >= (G.list().find((x) => x.id === tpl).std === 2 ? 4 : 12), tpl + " has too little variety: " + sigs.size);
 }
 console.log("OK", n, "generated questions;", "distinct stems per template:", JSON.stringify(seen));
