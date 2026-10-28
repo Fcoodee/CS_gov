@@ -1,0 +1,15 @@
+name: test
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: bank builds and verifies
+        run: python3 tools/build_bank.py /tmp/standard-01.js && diff /tmp/standard-01.js data/standard-01.js
+      - name: generators
+        run: node tests/test_generators.js
