@@ -2,10 +2,21 @@
  * البيانات: window.CS_BANKS.m01 (data/standard-01.js) + المولِّدات window.CSGen (js/generators.js). */
 (function(){
 "use strict";
-var BANK = window.CS_BANKS.m01, GEN = window.CSGen;
-var Q = BANK.questions, IND = BANK.indicators, STD = BANK.standard;
-var TPL = GEN.list(), TPLNAME = {}; TPL.forEach(function(t){ TPLNAME[t.id] = t.name; });
-var byId = {}; Q.forEach(function(q){ byId[q.id] = q; });
+var GEN = window.CSGen, STDS = window.CS_STANDARDS;
+var BUILT = STDS.filter(function(x){ return x.key && window.CS_BANKS[x.key]; });
+var byId = {}, TPLNAME = {}, TPLSTD = {};
+BUILT.forEach(function(x){
+  var b = window.CS_BANKS[x.key]; x.bank = b;
+  b.questions.forEach(function(q){ q.std = x.n; byId[q.id] = q; });
+  GEN.list(x.n).forEach(function(t){ TPLNAME[t.id] = t.name; TPLSTD[t.id] = x.n; });
+});
+var Q, IND, STD, TPL, curN = 0;
+/* يضبط سياق المعيار الحالي */
+function useStd(n){
+  var x = BUILT.filter(function(y){ return y.n === n; })[0]; if(!x) return false;
+  curN = n; Q = x.bank.questions; IND = x.bank.indicators; STD = x.bank.standard; TPL = GEN.list(n); return true;
+}
+useStd(BUILT[0].n);
 var LET = ["أ","ب","ج","د"];
 var DAY = 864e5, INTERVALS = [0,1,3,7];
 var CFG = window.CS_CONFIG || {};
@@ -39,7 +50,7 @@ function initDb(){
       var doc = db.doc("state/main");
       return doc.get().then(function(snap){
         if(snap.exists){ S = norm(snap.data()); lsSave(); } else { return doc.set(JSON.parse(JSON.stringify(S))); }
-      }).then(function(){ dbDoc = doc; sync = "db"; if(view === "home" || view === "report") render(); else updateFooter(); });
+      }).then(function(){ dbDoc = doc; sync = "db"; if(view === "home" || view === "report" || view === "hub") render(); else updateFooter(); });
     }).catch(function(){});
   }catch(e){}
 }
@@ -71,9 +82,10 @@ function fresh(tpl){ return GEN.make(tpl, newSeed()); }
 function sk(q){ return q.gen ? "g:" + q.tpl : q.id; }
 function fromKey(k){ return k.indexOf("g:") === 0 ? (TPLNAME[k.slice(2)] ? fresh(k.slice(2)) : null) : (byId[k] || null); }
 function lastOk(k){ var r = S.q[k]; return r && r.s ? (r.l ? "ok" : "no") : "none"; }
-function dueKeys(){
+function keyStd(k){ return k.indexOf("g:") === 0 ? TPLSTD[k.slice(2)] : (byId[k] && byId[k].std); }
+function dueKeys(std){
   var now = Date.now();
-  return Object.keys(S.q).filter(function(k){ var r = S.q[k]; return r.s > 0 && r.d <= now && fromKeyExists(k); })
+  return Object.keys(S.q).filter(function(k){ var r = S.q[k]; return r.s > 0 && r.d <= now && fromKeyExists(k) && (!std || keyStd(k) === std); })
     .sort(function(a,b){ return (S.q[a].b - S.q[b].b) || (S.q[a].d - S.q[b].d); });
 }
 function fromKeyExists(k){ return k.indexOf("g:") === 0 ? !!TPLNAME[k.slice(2)] : !!byId[k]; }
@@ -105,7 +117,7 @@ function startPractice(ind, kind){
   }
 }
 function startReview(){
-  var items = dueKeys().slice(0, 12).map(fromKey).filter(Boolean).map(mkItem);
+  var items = dueKeys(curN || 0).slice(0, 12).map(fromKey).filter(Boolean).map(mkItem);
   if(!items.length) return;
   begin("practice", items, "مراجعة مستحقة");
 }
@@ -113,12 +125,17 @@ function startRetry(){
   var wrong = session.items.filter(function(it){ return it.chosen !== it.q.ans; });
   begin("practice", shuffle(wrong).map(function(it){ return mkItem(it.q.gen ? fresh(it.q.tpl) : it.q); }), "إعادة الأسئلة الخاطئة");
 }
-function startExam(n){
+function largest(parts, n){
+  var left = n - parts.reduce(function(a,p){ return a + p.k; }, 0);
+  parts.slice().sort(function(a,b){ return b.f - a.f; }).slice(0, left).forEach(function(p){ p.k++; });
+}
+/* عناصر اختبار لمعيار واحد، موزّعة على المؤشرات بنسبة حجم بنكها */
+function examItemsFor(stdN, n){
+  useStd(stdN);
   var tot = Q.length, parts = IND.map(function(ind){
     var c = Q.filter(function(q){ return q.ind === ind.n; }).length; var x = n * c / tot; return { n:ind.n, k:Math.floor(x), f:x - Math.floor(x) };
   });
-  var left = n - parts.reduce(function(a,p){ return a + p.k; }, 0);
-  parts.slice().sort(function(a,b){ return b.f - a.f; }).slice(0, left).forEach(function(p){ p.k++; });
+  largest(parts, n);
   var items = [];
   parts.forEach(function(p){
     var pool = shuffle(Q.filter(function(q){ return q.ind === p.n; }));
@@ -126,13 +143,29 @@ function startExam(n){
     var ts = shuffle(TPL.filter(function(t){ return t.ind === p.n; })), g = 0;
     for(var i = 0; i < p.k; i++) items.push(mkItem(i < pool.length ? pool[i] : fresh(ts[g++ % ts.length].id)));
   });
-  begin("exam", shuffle(items), n === STD.expected ? "اختبار مصغّر بتوزيع المؤشرات" : "اختبار ممتد (" + n + " سؤالًا)", Math.round(n * SECS_PER_ITEM));
+  return items;
+}
+/* stdN = 0 يعني اختبارًا شاملًا: توزيع على المعايير المبنية بنسبة أوزانها */
+function startExam(n, stdN){
+  var items, title, keep = curN;
+  if(stdN){
+    items = examItemsFor(stdN, n);
+    title = n === STD.expected ? "اختبار مصغّر بتوزيع المؤشرات" : "اختبار ممتد (" + n + " سؤالًا)";
+  } else {
+    var wsum = BUILT.reduce(function(a,x){ return a + x.weight; }, 0);
+    var parts = BUILT.map(function(x){ var v = n * x.weight / wsum; return { n:x.n, k:Math.floor(v), f:v - Math.floor(v) }; });
+    largest(parts, n); items = [];
+    parts.forEach(function(p){ if(p.k) items = items.concat(examItemsFor(p.n, p.k)); });
+    title = "اختبار شامل (" + n + " سؤالًا، بنسبة أوزان المعايير)";
+    if(keep) useStd(keep);
+  }
+  begin("exam", shuffle(items), title, Math.round(n * SECS_PER_ITEM), stdN);
   startTick();
 }
-function begin(mode, items, title, secs){
+function begin(mode, items, title, secs, stdN){
   clearInterval(tick);
   var now = Date.now();
-  session = { mode:mode, items:items, i:0, title:title, t0:now, qStart:now, deadline: secs ? now + secs * 1000 : null, done:false, warn:false };
+  session = { mode:mode, std: stdN === undefined ? curN : stdN, items:items, i:0, title:title, t0:now, qStart:now, deadline: secs ? now + secs * 1000 : null, done:false, warn:false };
   view = "quiz"; render(); window.scrollTo(0,0);
 }
 function leave(){
@@ -182,7 +215,8 @@ function bitsHtml(n){
 function renderHome(){
   var due = dueKeys().length, rvKeys = Object.keys(S.rv);
   var done = rvKeys.filter(function(k){ return S.rv[k] === "ok"; }).length, flag = rvKeys.filter(function(k){ return S.rv[k] === "flag"; }).length;
-  var h = '<header class="head"><div class="eyebrow">حاسب آلي · المعيار الأول: ' + esc(STD.name) + "</div>"
+  var h = '<div class="topbar"><button class="btn ghost" data-act="hub">← كل المعايير</button></div>'
+    + '<header class="head"><div class="eyebrow">حاسب آلي · المعيار ' + STD.n + ": " + esc(STD.name) + "</div>"
     + "<h1>محاكي الرخصة المهنية 1448</h1></header>"
     + '<div class="notice" role="note"><b>تدريبي وغير رسمي.</b> الأسئلة مؤلَّفة آليًا بمساعدة الذكاء الاصطناعي ولم تُراجَع بشريًا بعد، فلا تعتمد عليها وحدها ولا تعدّها ضمانًا للنتيجة.</div>';
   h += '<section class="card" aria-labelledby="std-h"><div class="row between"><div class="eyebrow">المعيار ' + STD.n + " من " + STD.of + "</div>"
@@ -216,7 +250,7 @@ function renderHome(){
   h += '<section class="card"><div class="row between"><div><h3>حالة مراجعة الأسئلة</h3><p class="small muted">راجعتَ ' + done + " · أشرتَ إلى إشكال في " + flag
     + '</p></div><button class="btn" data-act="report">تقرير المراجعة</button></div></section>';
   h += '<details><summary>المصادر وحدود هذه الصفحة</summary><div class="small" style="display:flex;flex-direction:column;gap:8px">'
-    + "<p><b>المؤشرات:</b> منقولة من غلاف المعيار الأول في كتاب «الرخصة المهنية، تخصص الحاسب الآلي، النسخة الرابعة» لمعلم الحاسب، وليست من الوثيقة الرسمية لهيئة تقويم التعليم والتدريب. طابقها مع الوثيقة الرسمية قبل الاعتماد.</p>"
+    + "<p><b>المؤشرات:</b> منقولة من غلاف المعيار في كتاب «الرخصة المهنية، تخصص الحاسب الآلي، النسخة الرابعة» لمعلم الحاسب، وليست من الوثيقة الرسمية لهيئة تقويم التعليم والتدريب. طابقها مع الوثيقة الرسمية قبل الاعتماد.</p>"
     + "<p><b>الأسئلة:</b> أصيلة ومؤلَّفة بمساعدة Claude، وليست منقولة من الكتاب أو من اختبار رسمي أو من تجميعات متداولة. الموسومة «تعزيزي» تتجاوز ما يشرحه الكتاب.</p>"
     + "<p><b>المولِّدات:</b> كل نسخة تُولَّد من قالب وبذرة، وكل خيار خاطئ ناتج عن نموذج خطأ مسمّى ويُحسب بالكود. اختباراتها الآلية تعيد حساب الجواب مستقلًا على آلاف النسخ، لكنها لا تُغني عن مراجعتك. إحصاءاتك تُحفظ على مستوى القالب لا النسخة.</p>"
     + "<p><b>الاختبار:</b> عدد الأسئلة الفعلي وزمن الاختبار الرسميان غير موثّقين هنا؛ الوتيرة مبنية على قسمة ساعتين على 88 سؤالًا (تقدير).</p>"
@@ -317,13 +351,17 @@ function explainHtml(q, it){
 }
 function renderResult(){
   var items = session.items, n = items.length, right = 0, per = {}, exam = session.mode === "exam";
-  IND.forEach(function(i){ per[i.n] = { r:0, t:0 }; });
-  items.forEach(function(it){ var q = it.q, ok = it.chosen === q.ans; if(ok) right++; per[q.ind].t++; if(ok) per[q.ind].r++; });
+  var all = session.std === 0, rows = [];
+  if(!all) useStd(session.std);
+  var gk = function(q){ return all ? q.std : q.ind; };
+  (all ? BUILT.map(function(x){ return { k:x.n, label:"المعيار " + x.n + ": " + x.name }; }) : IND.map(function(i){ return { k:i.n, label:i.n + ": " + i.short }; }))
+    .forEach(function(g){ per[g.k] = { r:0, t:0 }; rows.push(g); });
+  items.forEach(function(it){ var q = it.q, ok = it.chosen === q.ans; if(ok) right++; per[gk(q)].t++; if(ok) per[gk(q)].r++; });
   var wrongN = items.filter(function(it){ return it.chosen !== it.q.ans; }).length;
   var h = '<header class="head"><div class="eyebrow">' + esc(session.title) + "</div><h1>النتيجة</h1></header>"
     + '<section class="card"><div class="score">' + right + " من " + n + '</div><p class="muted">' + Math.round(right / n * 100) + "% صحيحة</p>"
-    + '<div class="scroll" style="margin-top:12px"><table class="tbl"><thead><tr><th>المؤشر</th><th>الصحيح</th></tr></thead><tbody>'
-    + IND.filter(function(i){ return per[i.n].t; }).map(function(i){ return "<tr><td>" + i.n + ": " + esc(i.short) + "</td><td>" + per[i.n].r + " / " + per[i.n].t + "</td></tr>"; }).join("")
+    + '<div class="scroll" style="margin-top:12px"><table class="tbl"><thead><tr><th>' + (all ? "المعيار" : "المؤشر") + '</th><th>الصحيح</th></tr></thead><tbody>'
+    + rows.filter(function(g){ return per[g.k].t; }).map(function(g){ return "<tr><td>" + esc(g.label) + "</td><td>" + per[g.k].r + " / " + per[g.k].t + "</td></tr>"; }).join("")
     + "</tbody></table></div>"
     + '<div class="act"><button class="btn primary" data-act="home">الرئيسية</button>'
     + (wrongN ? '<button class="btn" data-act="retry">إعادة الأسئلة الخاطئة (' + wrongN + ")</button>" : "") + "</div></section>";
@@ -363,25 +401,54 @@ function reportText(){
 function badge(l){ return l === "ok" ? '<span class="chip good">صحيح</span>' : l === "no" ? '<span class="chip bad">خطأ</span>' : '<span class="chip">لم يُجَب</span>'; }
 function rvBadge(st){ return st === "ok" ? '<span class="chip good">سليم</span>' : st === "flag" ? '<span class="chip bad">إشكال</span>' : '<span class="chip">بانتظار المراجعة</span>'; }
 function renderReport(){
-  var h = '<header class="head"><div class="eyebrow">المعيار الأول</div><h1>تقرير مراجعة الأسئلة</h1></header>'
+  var h = '<header class="head"><div class="eyebrow">كل المعايير المبنية</div><h1>تقرير مراجعة الأسئلة</h1></header>'
     + '<p class="muted">الأسئلة مسودة حتى تحكم عليها. اعرض هنا ما راجعتَه وما أشرتَ إلى إشكال فيه، وانسخ الملخص لإرساله مع ملاحظاتك.</p>'
-    + '<section class="card"><div class="scroll"><table class="tbl"><thead><tr><th>السؤال / القالب</th><th>المؤشر</th><th>الأخير</th><th>المراجعة</th></tr></thead><tbody>';
-  Q.forEach(function(q){
-    h += "<tr><td>" + q.id + (q.extra ? ' <span class="chip warn">تعزيزي</span>' : "") + "</td><td>" + esc(IND[q.ind-1].short) + "</td><td>" + badge(lastOk(q.id)) + "</td><td>" + rvBadge(S.rv[q.id]) + "</td></tr>";
+    + '<section class="card"><div class="scroll"><table class="tbl"><thead><tr><th>السؤال / القالب</th><th>المعيار · المؤشر</th><th>الأخير</th><th>المراجعة</th></tr></thead><tbody>';
+  BUILT.forEach(function(x){
+    var inds = x.bank.indicators;
+    x.bank.questions.forEach(function(q){
+      h += "<tr><td>" + q.id + (q.extra ? ' <span class="chip warn">تعزيزي</span>' : "") + "</td><td>" + x.n + " · " + esc(inds[q.ind-1].short) + "</td><td>" + badge(lastOk(q.id)) + "</td><td>" + rvBadge(S.rv[q.id]) + "</td></tr>";
+    });
+    GEN.list(x.n).forEach(function(t){
+      h += "<tr><td>" + esc(t.name) + ' <span class="chip gen">مولَّد</span></td><td>' + x.n + " · " + esc(inds[t.ind-1].short) + "</td><td>" + badge(lastOk("g:" + t.id)) + "</td><td>" + rvBadge(S.rv["g:" + t.id]) + "</td></tr>";
+    });
   });
-  TPL.forEach(function(t){
-    h += "<tr><td>" + esc(t.name) + ' <span class="chip gen">مولَّد</span></td><td>' + esc(IND[t.ind-1].short) + "</td><td>" + badge(lastOk("g:" + t.id)) + "</td><td>" + rvBadge(S.rv["g:" + t.id]) + "</td></tr>";
-  });
-  h += '</tbody></table></div><div class="act"><button class="btn primary" data-act="home">الرئيسية</button><button class="btn" data-act="copy">نسخ ملخص الإشكالات</button>'
+  h += '</tbody></table></div><div class="act"><button class="btn primary" data-act="hub">كل المعايير</button><button class="btn" data-act="copy">نسخ ملخص الإشكالات</button>'
     + '<button class="btn ghost" data-act="reset">تصفير تقدّمي</button></div>'
     + '<textarea id="rpt" readonly aria-label="ملخص الإشكالات" hidden></textarea></section>';
+  return h;
+}
+function stdProgress(x){
+  var qs = x.bank.questions, ts = GEN.list(x.n);
+  var ok = qs.filter(function(q){ return lastOk(q.id) === "ok"; }).length, tok = ts.filter(function(t){ return lastOk("g:" + t.id) === "ok"; }).length;
+  var seen = qs.filter(function(q){ return lastOk(q.id) !== "none"; }).length + ts.filter(function(t){ return lastOk("g:" + t.id) !== "none"; }).length;
+  return { qs:qs.length, ts:ts.length, ok:ok, tok:tok, seen:seen, total:qs.length + ts.length };
+}
+function renderHub(){
+  var due = dueKeys(0).length, built = BUILT.length;
+  var h = '<header class="head"><div class="eyebrow">حاسب آلي · الرخصة المهنية 1448</div><h1>محاكي الرخصة المهنية</h1></header>'
+    + '<div class="notice" role="note"><b>تدريبي وغير رسمي.</b> الأسئلة مؤلَّفة آليًا بمساعدة الذكاء الاصطناعي ولم تُراجَع بشريًا بعد. الأوزان والمعايير منقولة من كتاب تجاري لا من الوثيقة الرسمية.</div>';
+  h += '<section class="card"><h2>اختبار شامل</h2><p class="muted small" style="margin-top:4px">يخلط المعايير المبنية (' + built + ' من ' + STDS.length + ') بنسبة أوزانها في الكتاب، دون تغذية راجعة حتى النهاية. الزمن لكل سؤال تقدير ≈ ' + Math.round(SECS_PER_ITEM) + ' ثانية (7200 ÷ 88) وهو غير موثّق رسميًا.</p>'
+    + '<div class="act">' + [10, 20, 30, 45].map(function(n){ return '<button class="btn primary" data-act="exam-all" data-n="' + n + '">شامل (' + n + ")</button>"; }).join("")
+    + '<button class="btn" data-act="review"' + (due ? "" : " disabled") + ">" + (due ? "مراجعة مستحقة (" + due + ")" : "لا مراجعة مستحقة") + '</button><button class="btn ghost" data-act="report">تقرير المراجعة</button></div></section>';
+  h += '<section aria-label="المعايير"><h2 style="margin-bottom:8px">المعايير</h2><div class="sgrid">';
+  STDS.forEach(function(x){
+    var on = BUILT.indexOf(x) >= 0, pr = on ? stdProgress(x) : null;
+    h += '<div class="scard' + (on ? "" : " off") + '"><div class="row between"><span class="snum">' + x.n + '</span><span class="small muted">' + x.weight + '%</span></div>'
+      + "<h3>" + esc(x.name) + "</h3>"
+      + (on ? '<p class="small muted">' + pr.qs + " ثابتًا + " + pr.ts + " قوالب · جرّبتَ " + pr.seen + " من " + pr.total + '</p><div class="bar"><i style="width:' + Math.round(pr.seen / pr.total * 100) + '%"></i></div>'
+        + '<button class="btn primary" data-act="open-std" data-key="' + x.key + '" aria-label="ادخل المعيار ' + x.n + ": " + esc(x.name) + '">ادخل</button>'
+        : '<p class="small muted">قريبًا</p><button class="btn" disabled>قريبًا</button>')
+      + "</div>";
+  });
+  h += "</div></section>";
   return h;
 }
 function updateFooter(){
   var f = document.getElementById("sync"); if(f) f.textContent = sync === "db" ? "التقدّم محفوظ في قاعدة بيانات الصفحة ويبقى بين الأجهزة." : "التقدّم محفوظ في هذا المتصفح فقط.";
 }
 function render(){
-  var h = view === "home" ? renderHome() : view === "quiz" ? renderQuiz() : view === "result" ? renderResult() : renderReport();
+  var h = view === "hub" ? renderHub() : view === "home" ? renderHome() : view === "quiz" ? renderQuiz() : view === "result" ? renderResult() : renderReport();
   h += '<footer><span id="sync"></span><span>محاكي تدريبي مستقل، غير تابع لهيئة تقويم التعليم والتدريب ولا للمركز الوطني للقياس.</span></footer>';
   app.innerHTML = h; updateFooter();
 }
@@ -390,14 +457,18 @@ function render(){
 app.addEventListener("click", function(e){
   var el = e.target.closest("[data-act]"); if(!el || el.disabled) return;
   var a = el.getAttribute("data-act"), it = session && session.items[session.i];
-  if(a === "home"){ clearInterval(tick); view = "home"; session = null; render(); window.scrollTo(0,0); }
+  if(a === "home"){ var toHub = session && session.std === 0; clearInterval(tick); view = toHub ? "hub" : "home"; session = null; render(); window.scrollTo(0,0); }
+  else if(a === "hub") goHash("#/");
+  else if(a === "open-std") goHash("#/" + el.getAttribute("data-key"));
+  else if(a === "exam-all") startExam(+el.getAttribute("data-n"), 0);
   else if(a === "practice-all") startPractice(0, "static");
   else if(a === "practice") startPractice(+el.getAttribute("data-ind"), "static");
   else if(a === "gen-all") startPractice(0, "gen");
   else if(a === "gen") startPractice(+el.getAttribute("data-ind"), "gen");
-  else if(a === "exam") startExam(+el.getAttribute("data-n"));
-  else if(a === "review") startReview();
+  else if(a === "exam") startExam(+el.getAttribute("data-n"), curN);
+  else if(a === "review"){ if(session === null && view === "hub") curN = 0; startReview(); }
   else if(a === "report"){ view = "report"; render(); window.scrollTo(0,0); }
+  else if(a === "report-back") goHash(location.hash || "#/")
   else if(a === "solve"){ it.solve = 1; render(); }
   else if(a === "solve-next"){ it.solve = Math.min(it.solve + 1, it.q.steps.length); render(); }
   else if(a === "solve-all"){ it.solve = it.q.steps.length; render(); }
@@ -433,8 +504,16 @@ document.addEventListener("keydown", function(e){
   }
 });
 
+function goHash(h){ if(location.hash === h || (h === "#/" && !location.hash)) route(); else location.hash = h; }
+function route(){
+  var h = location.hash.replace(/^#\/?/, ""); clearInterval(tick); session = null;
+  var x = BUILT.filter(function(y){ return y.key === h; })[0];
+  if(x){ useStd(x.n); view = "home"; } else { view = "hub"; }
+  render(); window.scrollTo(0,0);
+}
+window.addEventListener("hashchange", route);
 S = lsLoad() || S;
-render();
+route();
 initDb();
 window.__cs = { get session(){ return session; }, startExam: startExam, fmt: fmt };   // لواجهات الاختبار الآلي
 })();

@@ -150,3 +150,12 @@ footer{font-size:.8125rem;color:var(--muted);display:flex;flex-direction:column;
 .warnbox{border-inline-start:4px solid var(--warn);background:var(--warn-bg);color:var(--warn);padding:8px 12px;border-radius:6px}
 .chip.gen{background:var(--accent-soft);color:var(--ink)}
 .expr.sm{font-size:.8em}.expr.xs{font-size:.7em}
+
+.sgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.scard{background:var(--surface);border:1.5px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.scard.off{opacity:.55;border-style:dashed}
+.scard .snum{width:34px;height:34px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:700}
+.scard.off .snum{background:var(--none);color:var(--ink)}
+.scard h3{margin:0}
+.bar{height:6px;border-radius:3px;background:var(--surface2);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent)}
