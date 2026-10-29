@@ -45,7 +45,7 @@
     need(wrongs.length === 3, "need 3 wrongs");
     need(new Set(texts).size === 4, "duplicate options");
     var traces = {};
-    wrongs.forEach(function (w, i) { traces[i + 1] = { name: w.name, steps: w.steps, result: w.t }; });
+    wrongs.forEach(function (w, i) { var st = w.steps.slice(); if (st.length < 2) st.push("الصحيح: " + s.correct.why); traces[i + 1] = { name: w.name, steps: st, result: w.t }; });
     return {
       tpl: s.tpl, ind: s.ind, lvl: s.lvl, ref: s.ref, gen: true, extra: false,
       stem: s.stem,

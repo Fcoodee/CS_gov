@@ -13,5 +13,14 @@ jobs:
         run: python3 tools/build_bank.py /tmp/standard-01.js && diff /tmp/standard-01.js data/standard-01.js
       - name: bank m02 builds and verifies
         run: python3 tools/build_bank_m02.py /tmp/standard-02.js && diff /tmp/standard-02.js data/standard-02.js
+      - name: banks m03-m16 build and verify
+        run: |
+          cd tools
+          for n in 03 04 05 06 07 08 09 10 11 12 13 14 15 16; do
+            python3 build_bank_m$n.py /tmp/standard-$n.js
+            diff /tmp/standard-$n.js ../data/standard-$n.js
+          done
+      - name: bank structure
+        run: node tools/check_banks.js
       - name: generators
         run: node tests/test_generators.js
