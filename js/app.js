@@ -10,10 +10,15 @@ BUILT.forEach(function(x){
   b.questions.forEach(function(q){ q.std = x.n; byId[q.id] = q; });
   GEN.list(x.n).forEach(function(t){ TPLNAME[t.id] = t.name; TPLSTD[t.id] = x.n; });
 });
+/* بنك الدمج التربوي-التقني (تجريبي): خارج BUILT فلا يدخل الاختبار الشامل ولا الأوزان */
+var MIXB = window.CS_BANKS.mix || null, MIXN = 90;
+var MIXX = MIXB ? { n:MIXN, key:"mix", name:"دمج تربوي-تقني (تجريبي)", weight:0, bank:MIXB } : null;
+if(MIXX) MIXB.questions.forEach(function(q){ q.std = MIXN; byId[q.id] = q; });
+var ALLX = BUILT.concat(MIXX ? [MIXX] : []);
 var Q, IND, STD, TPL, curN = 0;
 /* يضبط سياق المعيار الحالي */
 function useStd(n){
-  var x = BUILT.filter(function(y){ return y.n === n; })[0]; if(!x) return false;
+  var x = ALLX.filter(function(y){ return y.n === n; })[0]; if(!x) return false;
   curN = n; Q = x.bank.questions; IND = x.bank.indicators; STD = x.bank.standard; TPL = GEN.list(n); return true;
 }
 useStd(BUILT[0].n);
@@ -115,6 +120,10 @@ function startPractice(ind, kind){
     title = ind ? "تدريب: " + IND[ind-1].short : "تدريب على المعيار كله";
     begin("practice", shuffle(pool).map(mkItem), title);
   }
+}
+function startMix(){
+  if(!MIXX) return;
+  useStd(MIXN); begin("practice", shuffle(Q.slice()).map(mkItem), "دمج تربوي-تقني (تجريبي)", null, MIXN);
 }
 function startReview(){
   var items = dueKeys(curN || 0).slice(0, 12).map(fromKey).filter(Boolean).map(mkItem);
@@ -354,7 +363,7 @@ function renderResult(){
   var all = session.std === 0, rows = [];
   if(!all) useStd(session.std);
   var gk = function(q){ return all ? q.std : q.ind; };
-  (all ? BUILT.map(function(x){ return { k:x.n, label:"المعيار " + x.n + ": " + x.name }; }) : IND.map(function(i){ return { k:i.n, label:i.n + ": " + i.short }; }))
+  (all ? ALLX.map(function(x){ return { k:x.n, label:(x.n === MIXN ? "" : "المعيار " + x.n + ": ") + x.name }; }) : IND.map(function(i){ return { k:i.n, label:i.n + ": " + i.short }; }))
     .forEach(function(g){ per[g.k] = { r:0, t:0 }; rows.push(g); });
   items.forEach(function(it){ var q = it.q, ok = it.chosen === q.ans; if(ok) right++; per[gk(q)].t++; if(ok) per[gk(q)].r++; });
   var wrongN = items.filter(function(it){ return it.chosen !== it.q.ans; }).length;
@@ -404,7 +413,7 @@ function renderReport(){
   var h = '<header class="head"><div class="eyebrow">كل المعايير المبنية</div><h1>تقرير مراجعة الأسئلة</h1></header>'
     + '<p class="muted">الأسئلة مسودة حتى تحكم عليها. اعرض هنا ما راجعتَه وما أشرتَ إلى إشكال فيه، وانسخ الملخص لإرساله مع ملاحظاتك.</p>'
     + '<section class="card"><div class="scroll"><table class="tbl"><thead><tr><th>السؤال / القالب</th><th>المعيار · المؤشر</th><th>الأخير</th><th>المراجعة</th></tr></thead><tbody>';
-  BUILT.forEach(function(x){
+  ALLX.forEach(function(x){
     var inds = x.bank.indicators;
     x.bank.questions.forEach(function(q){
       h += "<tr><td>" + q.id + (q.extra ? ' <span class="chip warn">تعزيزي</span>' : "") + "</td><td>" + x.n + " · " + esc(inds[q.ind-1].short) + "</td><td>" + badge(lastOk(q.id)) + "</td><td>" + rvBadge(S.rv[q.id]) + "</td></tr>";
@@ -444,6 +453,9 @@ function renderHub(){
       + "</div>";
   });
   h += "</div></section>";
+  if(MIXX) h += '<section class="card" aria-label="دمج تربوي-تقني"><h2>دمج تربوي-تقني <span class="chip warn">تجريبي</span></h2>'
+    + '<p class="muted small" style="margin-top:4px">' + MIXB.questions.length + " مواقف صفية تربط المحتوى التقني بقرارات التدريس (مستوى الهدف، واختيار الإستراتيجية، وجودة الهدف، والمنصات). مؤلَّفة آليًا ولم تُراجَع بشريًا، وهي خارج الاختبار الشامل حتى تُراجَع.</p>"
+    + '<div class="act"><button class="btn primary" data-act="mix">ابدأ التدريب</button></div></section>';
   return h;
 }
 var chartSort = "order";
@@ -496,8 +508,9 @@ function render(){
 app.addEventListener("click", function(e){
   var el = e.target.closest("[data-act]"); if(!el || el.disabled) return;
   var a = el.getAttribute("data-act"), it = session && session.items[session.i];
-  if(a === "home"){ var toHub = session && session.std === 0; clearInterval(tick); view = toHub ? "hub" : "home"; session = null; render(); window.scrollTo(0,0); }
+  if(a === "home"){ var toHub = session && (session.std === 0 || session.std === MIXN); clearInterval(tick); view = toHub ? "hub" : "home"; session = null; render(); window.scrollTo(0,0); }
   else if(a === "hub") goHash("#/");
+  else if(a === "mix") startMix();
   else if(a === "chart") goHash("#/chart");
   else if(a === "concepts") goHash("#/concepts");
   else if(a === "chart-sort"){ chartSort = chartSort === "weight" ? "order" : "weight"; render(); }
