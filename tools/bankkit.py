@@ -4,6 +4,18 @@
 الاستعمال: bk = Bank(...); bk.mc(...); bk.write(path)"""
 import json
 
+
+TERSE = 18  # سبب ≤ هذا الطول يُعدّ مقتضبًا فيُغنى بربطه بالجواب الصحيح والصفحة
+
+def enrich(why, correct_text, ref):
+    """يحوّل تفسيرًا مقتضبًا ("ليس ذلك.") إلى تفسير يذكر الجواب المطلوب ومرجعه. التفسيرات المفصّلة لا تُمسّ."""
+    if len(why.strip()) > TERSE: return why
+    w = why.strip().rstrip('.')
+    if w in ('ليس ذلك','ليست ذلك','ليست كذلك','ليس المقصود','ليس هدفًا','ليس كذلك'): w = 'خيار غير صحيح لهذا السؤال'
+    c = correct_text.strip().rstrip('.؛،')
+    if len(c) > 80: c = c[:80].rsplit(' ', 1)[0] + '…'
+    return f"{w}؛ المطلوب هنا: {c} ({ref})."
+
 class Bank:
     def __init__(self, n, key, name, weight, expected, goal, indicators):
         self.std = dict(n=n, name=name, of=16, weight=weight, expected=expected, goal=goal)
@@ -28,7 +40,7 @@ class Bank:
             assert len(w) == 3, (qid, "wrong must be (text,name,why)")
             tr[str(i + 1)] = dict(name=w[1], steps=[w[2], "الصحيح: " + correct[1]], result=w[0])
         self.Q.append(dict(id=qid, ind=ind, lvl=lvl, ref=ref, stem=stem,
-            opts=[dict(t=correct[0], why=correct[1])] + [dict(t=w[0], why=w[2]) for w in wrongs], ans=0,
+            opts=[dict(t=correct[0], why=correct[1])] + [dict(t=w[0], why=enrich(w[2], correct[0], ref)) for w in wrongs], ans=0,
             hint=hint, concept=concept, extra=extra, steps=steps, verify=verify, traces=tr))
         return qid
 
@@ -37,7 +49,7 @@ class Bank:
         qid = self._add(ind, lvl, ref, stem, correct, wrongs, hint, concept, steps, verify, extra)
         for w in wrongs: assert len(w) == 4 and len(w[3]) >= 2, (qid, "explicit trace needs >=2 steps")
         self.Q.append(dict(id=qid, ind=ind, lvl=lvl, ref=ref, stem=stem,
-            opts=[dict(t=correct[0], why=correct[1])] + [dict(t=w[0], why=w[2]) for w in wrongs], ans=0,
+            opts=[dict(t=correct[0], why=correct[1])] + [dict(t=w[0], why=enrich(w[2], correct[0], ref)) for w in wrongs], ans=0,
             hint=hint, concept=concept, extra=extra, steps=steps, verify=verify,
             traces={str(i + 1): dict(name=w[1], steps=w[3], result=w[0]) for i, w in enumerate(wrongs)}))
         return qid
