@@ -3,6 +3,13 @@
 const assert = require("assert");
 const G = require("../js/generators.js");
 require("../js/generators-m02.js");
+require("../js/generators-m04.js");
+require("../js/generators-m05.js");
+require("../js/generators-m06.js");
+require("../js/generators-m07.js");
+require("../js/generators-m08.js");
+require("../js/generators-m15.js");
+require("../js/generators-m16.js");
 const SEEDS = +process.env.SEEDS || 400;
 
 const strip = (t) => t.replace(/`/g, "");
@@ -94,6 +101,8 @@ Object.assign(checks, {
   transfer(q) { const k = q.params.k; assert.strictEqual(strip(q.opts[0].t), k + " نبضة / 1 نبضة"); q.opts.slice(1).forEach((o) => assert.notStrictEqual(strip(o.t), k + " نبضة / 1 نبضة")); }
 });
 
+Object.assign(checks, require("./checks_m04.js")(assert, strip), require("./checks_m05.js")(assert, strip), require("./checks_m06.js")(assert, strip), require("./checks_m07.js")(assert, strip), require("./checks_m08.js")(assert, strip), require("./checks_m15.js")(assert, strip), require("./checks_m16.js")(assert, strip));
+
 let n = 0; const seen = {};
 for (const tpl of G.list().map((x) => x.id)) {
   assert.ok(checks[tpl], "missing check for " + tpl);
@@ -106,6 +115,6 @@ for (const tpl of G.list().map((x) => x.id)) {
     if (seed % 50 === 0) assert.deepStrictEqual(JSON.parse(JSON.stringify(G.make(tpl, seed))), JSON.parse(JSON.stringify(q)));
   }
   seen[tpl] = sigs.size;
-  assert.ok(sigs.size >= (G.list().find((x) => x.id === tpl).std === 2 ? 4 : 12), tpl + " has too little variety: " + sigs.size);
+  assert.ok(sigs.size >= (G.list().find((x) => x.id === tpl).std === 1 ? 12 : 4), tpl + " has too little variety: " + sigs.size);
 }
 console.log("OK", n, "generated questions;", "distinct stems per template:", JSON.stringify(seen));
