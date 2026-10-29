@@ -47,6 +47,6 @@ class Bank:
         bank = dict(version="0.1-draft", standard=self.std, indicators=self.inds, questions=self.Q)
         s = json.dumps(bank, ensure_ascii=False, indent=1).replace("</", "<\\/")
         open(out, "w", encoding="utf-8").write(
-            f"/* مولَّد آليًا من tools/build_bank_m{self.std['n']:02d}.py — لا تعدّله يدويًا */\n"
+            f"/* مولَّد آليًا من tools/{getattr(self, 'script', 'build_bank_m%02d.py' % self.std['n'])} — لا تعدّله يدويًا */\n"
             f"window.CS_BANKS = window.CS_BANKS || {{}};\nwindow.CS_BANKS.{self.key} = {s};\n")
         print("OK", self.key, len(self.Q), "questions;", sum(1 for q in self.Q if q["extra"]), "extra")

@@ -10,10 +10,15 @@ BUILT.forEach(function(x){
   b.questions.forEach(function(q){ q.std = x.n; byId[q.id] = q; });
   GEN.list(x.n).forEach(function(t){ TPLNAME[t.id] = t.name; TPLSTD[t.id] = x.n; });
 });
+/* بنك الدمج التربوي-التقني (تجريبي): خارج BUILT فلا يدخل الاختبار الشامل ولا الأوزان */
+var MIXB = window.CS_BANKS.mix || null, MIXN = 90;
+var MIXX = MIXB ? { n:MIXN, key:"mix", name:"دمج تربوي-تقني (تجريبي)", weight:0, bank:MIXB } : null;
+if(MIXX) MIXB.questions.forEach(function(q){ q.std = MIXN; byId[q.id] = q; });
+var ALLX = BUILT.concat(MIXX ? [MIXX] : []);
 var Q, IND, STD, TPL, curN = 0;
 /* يضبط سياق المعيار الحالي */
 function useStd(n){
-  var x = BUILT.filter(function(y){ return y.n === n; })[0]; if(!x) return false;
+  var x = ALLX.filter(function(y){ return y.n === n; })[0]; if(!x) return false;
   curN = n; Q = x.bank.questions; IND = x.bank.indicators; STD = x.bank.standard; TPL = GEN.list(n); return true;
 }
 useStd(BUILT[0].n);
@@ -115,6 +120,10 @@ function startPractice(ind, kind){
     title = ind ? "تدريب: " + IND[ind-1].short : "تدريب على المعيار كله";
     begin("practice", shuffle(pool).map(mkItem), title);
   }
+}
+function startMix(){
+  if(!MIXX) return;
+  useStd(MIXN); begin("practice", shuffle(Q.slice()).map(mkItem), "دمج تربوي-تقني (تجريبي)", null, MIXN);
 }
 function startReview(){
   var items = dueKeys(curN || 0).slice(0, 12).map(fromKey).filter(Boolean).map(mkItem);
@@ -354,7 +363,7 @@ function renderResult(){
   var all = session.std === 0, rows = [];
   if(!all) useStd(session.std);
   var gk = function(q){ return all ? q.std : q.ind; };
-  (all ? BUILT.map(function(x){ return { k:x.n, label:"المعيار " + x.n + ": " + x.name }; }) : IND.map(function(i){ return { k:i.n, label:i.n + ": " + i.short }; }))
+  (all ? ALLX.map(function(x){ return { k:x.n, label:(x.n === MIXN ? "" : "المعيار " + x.n + ": ") + x.name }; }) : IND.map(function(i){ return { k:i.n, label:i.n + ": " + i.short }; }))
     .forEach(function(g){ per[g.k] = { r:0, t:0 }; rows.push(g); });
   items.forEach(function(it){ var q = it.q, ok = it.chosen === q.ans; if(ok) right++; per[gk(q)].t++; if(ok) per[gk(q)].r++; });
   var wrongN = items.filter(function(it){ return it.chosen !== it.q.ans; }).length;
@@ -404,7 +413,7 @@ function renderReport(){
   var h = '<header class="head"><div class="eyebrow">كل المعايير المبنية</div><h1>تقرير مراجعة الأسئلة</h1></header>'
     + '<p class="muted">الأسئلة مسودة حتى تحكم عليها. اعرض هنا ما راجعتَه وما أشرتَ إلى إشكال فيه، وانسخ الملخص لإرساله مع ملاحظاتك.</p>'
     + '<section class="card"><div class="scroll"><table class="tbl"><thead><tr><th>السؤال / القالب</th><th>المعيار · المؤشر</th><th>الأخير</th><th>المراجعة</th></tr></thead><tbody>';
-  BUILT.forEach(function(x){
+  ALLX.forEach(function(x){
     var inds = x.bank.indicators;
     x.bank.questions.forEach(function(q){
       h += "<tr><td>" + q.id + (q.extra ? ' <span class="chip warn">تعزيزي</span>' : "") + "</td><td>" + x.n + " · " + esc(inds[q.ind-1].short) + "</td><td>" + badge(lastOk(q.id)) + "</td><td>" + rvBadge(S.rv[q.id]) + "</td></tr>";
@@ -431,7 +440,8 @@ function renderHub(){
   h += '<section class="card"><h2>اختبار شامل</h2><p class="muted small" style="margin-top:4px">يخلط المعايير المبنية (' + built + ' من ' + STDS.length + ') بنسبة أوزانها في الكتاب، دون تغذية راجعة حتى النهاية. الزمن لكل سؤال تقدير ≈ ' + Math.round(SECS_PER_ITEM) + ' ثانية (7200 ÷ 88) وهو غير موثّق رسميًا.</p>'
     + '<div class="act">' + [10, 20, 30, 45].map(function(n){ return '<button class="btn primary" data-act="exam-all" data-n="' + n + '">شامل (' + n + ")</button>"; }).join("")
     + '<button class="btn" data-act="review"' + (due ? "" : " disabled") + ">" + (due ? "مراجعة مستحقة (" + due + ")" : "لا مراجعة مستحقة") + '</button><button class="btn ghost" data-act="report">تقرير المراجعة</button></div></section>';
-  h += '<button class="btn chartbtn" data-act="chart" aria-label="مخطط المعايير وأوزانها"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="4" width="4" height="17" rx="1"/><rect x="17" y="8" width="4" height="13" rx="1"/></svg><span>مخطط المعايير وأوزانها</span></button>';
+  h += '<div class="act"><button class="btn chartbtn" data-act="chart" aria-label="مخطط المعايير وأوزانها"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="4" width="4" height="17" rx="1"/><rect x="17" y="8" width="4" height="13" rx="1"/></svg><span>مخطط المعايير وأوزانها</span></button>'
+    + '<button class="btn chartbtn" data-act="concepts" aria-label="بطاقات المفاهيم الصعبة"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor"><path d="M4 4h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-7l-4 4v-4H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm3 4v2h10V8H7zm0 4v2h7v-2H7z"/></svg><span>بطاقات المفاهيم</span></button></div>';
   h += '<section aria-label="المعايير"><h2 style="margin-bottom:8px">المعايير</h2><div class="sgrid">';
   STDS.forEach(function(x){
     var on = BUILT.indexOf(x) >= 0, pr = on ? stdProgress(x) : null;
@@ -443,6 +453,9 @@ function renderHub(){
       + "</div>";
   });
   h += "</div></section>";
+  if(MIXX) h += '<section class="card" aria-label="دمج تربوي-تقني"><h2>دمج تربوي-تقني <span class="chip warn">تجريبي</span></h2>'
+    + '<p class="muted small" style="margin-top:4px">' + MIXB.questions.length + " مواقف صفية تربط المحتوى التقني بقرارات التدريس (مستوى الهدف، واختيار الإستراتيجية، وجودة الهدف، والمنصات). مؤلَّفة آليًا ولم تُراجَع بشريًا، وهي خارج الاختبار الشامل حتى تُراجَع.</p>"
+    + '<div class="act"><button class="btn primary" data-act="mix">ابدأ التدريب</button></div></section>';
   return h;
 }
 var chartSort = "order";
@@ -462,11 +475,31 @@ function renderChart(){
   });
   return h + "</ul></section>";
 }
+function renderConcepts(){
+  var list = window.CS_CONCEPTS || [];
+  var h = '<header class="head"><div class="eyebrow">حاسب آلي · الرخصة المهنية 1448</div><h1>بطاقات المفاهيم</h1></header>'
+    + '<div class="act"><button class="btn" data-act="hub">← الرئيسية</button></div>'
+    + '<div class="notice" role="note"><b>للمراجعة لا للحفظ.</b> التعريفات من الكتاب بصفحاته. التشبيهات وحدودها من إعداد المحاكي بمساعدة الذكاء الاصطناعي ولم تُراجَع بشريًا؛ لذلك يذكر كل تشبيه أين ينكسر.</div>'
+    + '<section>';
+  list.forEach(function(c){
+    var x = STDS.filter(function(y){ return y.n === c.std; })[0];
+    h += '<details class="cc"><summary><b>' + esc(c.name) + '</b> <span class="chip acc">معيار ' + c.std + '</span> <span class="chip">' + esc(c.ref) + '</span></summary>'
+      + '<h3>التعريف (من الكتاب)</h3><ul>' + c.defn.map(function(d){ return "<li>" + fmt(d) + "</li>"; }).join("") + "</ul>"
+      + '<h3>كلمة المفتاح</h3><p>' + fmt(c.cue) + "</p>"
+      + '<h3>تشبيه <span class="chip warn">من إعداد المحاكي</span></h3><p>' + fmt(c.analogy) + "</p>"
+      + '<h3>أين ينكسر التشبيه</h3><p>' + fmt(c.breaks) + "</p>"
+      + '<h3>خلط شائع</h3><p>' + fmt(c.confuse) + "</p>"
+      + (c.outside ? '<p class="small muted"><span class="chip warn">خارج الكتاب</span> ' + fmt(c.outside) + "</p>" : "")
+      + (x && BUILT.indexOf(x) >= 0 ? '<button class="btn primary" data-act="open-std" data-key="' + x.key + '">تدرّب على معيار ' + c.std + "</button>" : "")
+      + "</details>";
+  });
+  return h + "</section>";
+}
 function updateFooter(){
   var f = document.getElementById("sync"); if(f) f.textContent = sync === "db" ? "التقدّم محفوظ في قاعدة بيانات الصفحة ويبقى بين الأجهزة." : "التقدّم محفوظ في هذا المتصفح فقط.";
 }
 function render(){
-  var h = view === "hub" ? renderHub() : view === "chart" ? renderChart() : view === "home" ? renderHome() : view === "quiz" ? renderQuiz() : view === "result" ? renderResult() : renderReport();
+  var h = view === "hub" ? renderHub() : view === "chart" ? renderChart() : view === "concepts" ? renderConcepts() : view === "home" ? renderHome() : view === "quiz" ? renderQuiz() : view === "result" ? renderResult() : renderReport();
   h += '<footer><span id="sync"></span><span>محاكي تدريبي مستقل، غير تابع لهيئة تقويم التعليم والتدريب ولا للمركز الوطني للقياس.</span></footer>';
   app.innerHTML = h; updateFooter();
 }
@@ -475,9 +508,11 @@ function render(){
 app.addEventListener("click", function(e){
   var el = e.target.closest("[data-act]"); if(!el || el.disabled) return;
   var a = el.getAttribute("data-act"), it = session && session.items[session.i];
-  if(a === "home"){ var toHub = session && session.std === 0; clearInterval(tick); view = toHub ? "hub" : "home"; session = null; render(); window.scrollTo(0,0); }
+  if(a === "home"){ var toHub = session && (session.std === 0 || session.std === MIXN); clearInterval(tick); view = toHub ? "hub" : "home"; session = null; render(); window.scrollTo(0,0); }
   else if(a === "hub") goHash("#/");
+  else if(a === "mix") startMix();
   else if(a === "chart") goHash("#/chart");
+  else if(a === "concepts") goHash("#/concepts");
   else if(a === "chart-sort"){ chartSort = chartSort === "weight" ? "order" : "weight"; render(); }
   else if(a === "open-std") goHash("#/" + el.getAttribute("data-key"));
   else if(a === "exam-all") startExam(+el.getAttribute("data-n"), 0);
@@ -528,7 +563,7 @@ function goHash(h){ if(location.hash === h || (h === "#/" && !location.hash)) ro
 function route(){
   var h = location.hash.replace(/^#\/?/, ""); clearInterval(tick); session = null;
   var x = BUILT.filter(function(y){ return y.key === h; })[0];
-  if(x){ useStd(x.n); view = "home"; } else { view = h === "chart" ? "chart" : "hub"; }
+  if(x){ useStd(x.n); view = "home"; } else { view = h === "chart" ? "chart" : h === "concepts" ? "concepts" : "hub"; }
   render(); window.scrollTo(0,0);
 }
 window.addEventListener("hashchange", route);

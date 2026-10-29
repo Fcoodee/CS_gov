@@ -3,13 +3,13 @@
 const fs = require("fs"), path = require("path"), assert = require("assert"), vm = require("vm");
 const dir = path.join(__dirname, "..", "data"); const win = { CS_BANKS: {} }; vm.createContext(win); win.window = win;
 let total = 0;
-for (const f of fs.readdirSync(dir).filter((x) => /^standard-\d+\.js$/.test(x)).sort()) {
+for (const f of fs.readdirSync(dir).filter((x) => /^(standard-\d+|integrated)\.js$/.test(x)).sort()) {
   vm.runInContext(fs.readFileSync(path.join(dir, f), "utf8"), win);
 }
 for (const [k, b] of Object.entries(win.CS_BANKS)) {
   if (+k.slice(1) < 3) { console.log(k, b.questions.length, "questions (legacy schema: skipped)"); continue; } /* m01/m02 لهما بانيان وفحوص خاصة */
   const ids = new Set();
-  assert.ok(b.indicators.length >= 1 && b.standard.expected > 0, k);
+  assert.ok(b.indicators.length >= 1 && (b.standard.expected > 0 || k === "mix"), k);
   for (const q of b.questions) {
     assert.ok(!ids.has(q.id), k + " dup id " + q.id); ids.add(q.id);
     assert.ok(q.ind >= 1 && q.ind <= b.indicators.length, q.id + " ind");

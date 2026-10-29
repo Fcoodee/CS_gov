@@ -20,6 +20,8 @@ jobs:
             python3 build_bank_m$n.py /tmp/standard-$n.js
             diff /tmp/standard-$n.js ../data/standard-$n.js
           done
+      - name: integrated bank builds and verifies
+        run: cd tools && python3 build_integrated.py /tmp/integrated.js && diff /tmp/integrated.js ../data/integrated.js
       - name: bank structure
         run: node tools/check_banks.js
       - name: generators
