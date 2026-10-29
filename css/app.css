@@ -102,7 +102,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .hint{background:var(--accent-soft);border-radius:10px;padding:10px 14px;margin-top:12px}
 .explain{margin-top:16px;border-top:1px solid var(--line);padding-top:14px;display:flex;flex-direction:column;gap:12px}
 .explain ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
-.explain li{display:grid;grid-template-columns:26px 1fr;gap:8px}
+.explain li{display:grid;grid-template-columns:26px minmax(0,1fr);gap:8px}
 .mark{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:.8125rem;font-weight:700}
 .mark.ok{background:var(--good-bg);color:var(--good)}
 .mark.no{background:var(--bad-bg);color:var(--bad)}

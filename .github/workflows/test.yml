@@ -22,6 +22,8 @@ jobs:
           done
       - name: integrated bank builds and verifies
         run: cd tools && python3 build_integrated.py /tmp/integrated.js && diff /tmp/integrated.js ../data/integrated.js
+      - name: review sample is current
+        run: python3 tools/review_sample.py /tmp/rs.md && diff /tmp/rs.md docs/review_sample.md
       - name: bank structure
         run: node tools/check_banks.js
       - name: generators
