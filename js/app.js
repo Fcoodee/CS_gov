@@ -431,6 +431,7 @@ function renderHub(){
   h += '<section class="card"><h2>اختبار شامل</h2><p class="muted small" style="margin-top:4px">يخلط المعايير المبنية (' + built + ' من ' + STDS.length + ') بنسبة أوزانها في الكتاب، دون تغذية راجعة حتى النهاية. الزمن لكل سؤال تقدير ≈ ' + Math.round(SECS_PER_ITEM) + ' ثانية (7200 ÷ 88) وهو غير موثّق رسميًا.</p>'
     + '<div class="act">' + [10, 20, 30, 45].map(function(n){ return '<button class="btn primary" data-act="exam-all" data-n="' + n + '">شامل (' + n + ")</button>"; }).join("")
     + '<button class="btn" data-act="review"' + (due ? "" : " disabled") + ">" + (due ? "مراجعة مستحقة (" + due + ")" : "لا مراجعة مستحقة") + '</button><button class="btn ghost" data-act="report">تقرير المراجعة</button></div></section>';
+  h += '<button class="btn chartbtn" data-act="chart" aria-label="مخطط المعايير وأوزانها"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="4" width="4" height="17" rx="1"/><rect x="17" y="8" width="4" height="13" rx="1"/></svg><span>مخطط المعايير وأوزانها</span></button>';
   h += '<section aria-label="المعايير"><h2 style="margin-bottom:8px">المعايير</h2><div class="sgrid">';
   STDS.forEach(function(x){
     var on = BUILT.indexOf(x) >= 0, pr = on ? stdProgress(x) : null;
@@ -444,11 +445,28 @@ function renderHub(){
   h += "</div></section>";
   return h;
 }
+var chartSort = "order";
+function renderChart(){
+  var list = STDS.slice(), total = 0, max = 0;
+  list.forEach(function(x){ total += x.weight; if(x.weight > max) max = x.weight; });
+  if(chartSort === "weight") list.sort(function(a, b){ return b.weight - a.weight || a.n - b.n; });
+  var h = '<header class="head"><div class="eyebrow">حاسب آلي · الرخصة المهنية 1448</div><h1>أوزان المعايير</h1></header>'
+    + '<div class="act"><button class="btn" data-act="hub">← الرئيسية</button><button class="btn" data-act="chart-sort" aria-pressed="' + (chartSort === "weight") + '">' + (chartSort === "weight" ? "الترتيب حسب رقم المعيار" : "الترتيب حسب الوزن") + '</button></div>'
+    + '<section class="card"><p class="muted small">الوزن النسبي لكل معيار في الاختبار، والمجموع ' + total + '%. اضغط على أي معيار للدخول إليه. الأوزان منقولة من مخطط الكتاب (ص5)، وليست من الوثيقة الرسمية.</p>'
+    + '<div class="wstrip" aria-hidden="true">' + list.map(function(x){ return '<i style="flex:' + x.weight + '" title="' + x.n + ": " + esc(x.name) + " " + x.weight + '%"></i>'; }).join("") + '</div>'
+    + '<ul class="wchart" role="list">';
+  list.forEach(function(x){
+    var on = BUILT.indexOf(x) >= 0, pct = Math.round(x.weight / max * 100);
+    var inner = '<span class="snum">' + x.n + '</span><span class="wname">' + esc(x.name) + '</span><span class="wtrack"><i style="width:' + pct + '%"></i></span><span class="wval">' + x.weight + '%</span>';
+    h += "<li>" + (on ? '<button class="wrow" data-act="open-std" data-key="' + x.key + '" aria-label="المعيار ' + x.n + ": " + esc(x.name) + "، الوزن " + x.weight + '%">' + inner + "</button>" : '<div class="wrow">' + inner + "</div>") + "</li>";
+  });
+  return h + "</ul></section>";
+}
 function updateFooter(){
   var f = document.getElementById("sync"); if(f) f.textContent = sync === "db" ? "التقدّم محفوظ في قاعدة بيانات الصفحة ويبقى بين الأجهزة." : "التقدّم محفوظ في هذا المتصفح فقط.";
 }
 function render(){
-  var h = view === "hub" ? renderHub() : view === "home" ? renderHome() : view === "quiz" ? renderQuiz() : view === "result" ? renderResult() : renderReport();
+  var h = view === "hub" ? renderHub() : view === "chart" ? renderChart() : view === "home" ? renderHome() : view === "quiz" ? renderQuiz() : view === "result" ? renderResult() : renderReport();
   h += '<footer><span id="sync"></span><span>محاكي تدريبي مستقل، غير تابع لهيئة تقويم التعليم والتدريب ولا للمركز الوطني للقياس.</span></footer>';
   app.innerHTML = h; updateFooter();
 }
@@ -459,6 +477,8 @@ app.addEventListener("click", function(e){
   var a = el.getAttribute("data-act"), it = session && session.items[session.i];
   if(a === "home"){ var toHub = session && session.std === 0; clearInterval(tick); view = toHub ? "hub" : "home"; session = null; render(); window.scrollTo(0,0); }
   else if(a === "hub") goHash("#/");
+  else if(a === "chart") goHash("#/chart");
+  else if(a === "chart-sort"){ chartSort = chartSort === "weight" ? "order" : "weight"; render(); }
   else if(a === "open-std") goHash("#/" + el.getAttribute("data-key"));
   else if(a === "exam-all") startExam(+el.getAttribute("data-n"), 0);
   else if(a === "practice-all") startPractice(0, "static");
@@ -508,7 +528,7 @@ function goHash(h){ if(location.hash === h || (h === "#/" && !location.hash)) ro
 function route(){
   var h = location.hash.replace(/^#\/?/, ""); clearInterval(tick); session = null;
   var x = BUILT.filter(function(y){ return y.key === h; })[0];
-  if(x){ useStd(x.n); view = "home"; } else { view = "hub"; }
+  if(x){ useStd(x.n); view = "home"; } else { view = h === "chart" ? "chart" : "hub"; }
   render(); window.scrollTo(0,0);
 }
 window.addEventListener("hashchange", route);

@@ -159,3 +159,19 @@ footer{font-size:.8125rem;color:var(--muted);display:flex;flex-direction:column;
 .scard h3{margin:0}
 .bar{height:6px;border-radius:3px;background:var(--surface2);overflow:hidden}
 .bar i{display:block;height:100%;background:var(--accent)}
+
+/* مخطط الأوزان */
+.chartbtn{display:inline-flex;align-items:center;gap:8px;margin-block:12px;color:var(--accent)}
+.wstrip{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:12px 0;gap:2px}
+.wstrip i{background:var(--accent);opacity:.9;min-width:2px}
+.wstrip i:nth-child(even){opacity:.55}
+.wchart{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.wrow{display:grid;grid-template-columns:34px minmax(0,9.5em) minmax(0,1fr) 3em;align-items:center;gap:10px;width:100%;padding:6px 8px;border:1.5px solid transparent;border-radius:10px;background:transparent;color:inherit;font:inherit;text-align:start}
+button.wrow{cursor:pointer}
+button.wrow:hover{border-color:var(--accent);background:var(--accent-soft)}
+.wrow .snum{width:30px;height:30px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:700;font-size:.85rem}
+.wname{overflow-wrap:anywhere;line-height:1.3}
+.wtrack{height:16px;background:var(--line);border-radius:8px;overflow:hidden;display:block}
+.wtrack i{display:block;height:100%;background:var(--accent);border-radius:8px}
+.wval{font-weight:700;text-align:end;font-variant-numeric:tabular-nums}
+@media (max-width:480px){.wrow{grid-template-columns:30px minmax(0,1fr) 2.8em;grid-template-areas:"n name val" "t t t"}.wrow .snum{grid-area:n}.wname{grid-area:name}.wval{grid-area:val}.wtrack{grid-area:t}}
