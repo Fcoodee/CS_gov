@@ -175,3 +175,11 @@ button.wrow:hover{border-color:var(--accent);background:var(--accent-soft)}
 .wtrack i{display:block;height:100%;background:var(--accent);border-radius:8px}
 .wval{font-weight:700;text-align:end;font-variant-numeric:tabular-nums}
 @media (max-width:480px){.wrow{grid-template-columns:30px minmax(0,1fr) 2.8em;grid-template-areas:"n name val" "t t t"}.wrow .snum{grid-area:n}.wname{grid-area:name}.wval{grid-area:val}.wtrack{grid-area:t}}
+
+/* بطاقات المفاهيم */
+.cc{margin-top:8px}
+.cc summary{cursor:pointer;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.cc h3{margin:12px 0 4px;font-size:.95rem;color:var(--accent)}
+.cc ul{margin:0;padding-inline-start:20px}
+.cc p{margin:0}
+.cc .btn{margin-top:12px}
